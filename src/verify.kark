@@ -1,0 +1,14 @@
+// Integration verification for the Karkain-Migrations public API.
+import migrations
+
+func main() {
+    let h = record_migration(new_history(), 1, "create_users")
+    h = record_migration(h, 2, "add_email")
+    h = mark_rolled_back(h, 2)
+
+    assert_eq(migration_count(h), 2)
+    assert_eq(last_version(h), 1)
+    assert_eq(pending_count(h, [1, 2, 3]), 2)
+    println(describe_migration(h, 1))
+    println(describe_migration(h, 2))
+}

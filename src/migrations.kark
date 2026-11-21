@@ -1,0 +1,120 @@
+// Karkain-Migrations - schema migration history tracking.
+// Karkain Language v1.2.0 verified baseline (tag v1.2.0,
+// commit 77d70693e1e3134dac312a303bffafa7d50fa988).
+//
+// Scope boundary: this framework records migration state and computes
+// pending versions. It does not execute SQL or modify a database.
+//
+// History representation: triples [version, name, state, ...] with state
+// "applied" or "rolled_back". Arrays are values; callers capture returns.
+
+// new_history returns an empty migration history.
+public func new_history() {
+    return []
+}
+
+// record_migration adds or replaces a version with state "applied".
+public func record_migration(history, version, name) {
+    let out = remove_migration(history, version)
+    out = push(out, version)
+    out = push(out, name)
+    out = push(out, "applied")
+    return out
+}
+
+// remove_migration deletes a version entry.
+public func remove_migration(history, version) {
+    let out = []
+    let i = 0
+    while (i < len(history)) {
+        if history[i] == version {
+            i = i + 3
+        } else {
+            out = push(out, history[i])
+            out = push(out, history[i + 1])
+            out = push(out, history[i + 2])
+            i = i + 3
+        }
+    }
+    return out
+}
+
+// mark_rolled_back changes a recorded version to "rolled_back".
+public func mark_rolled_back(history, version) {
+    if migration_state(history, version) == "missing" {
+        return history
+    }
+    let out = []
+    let i = 0
+    while (i < len(history)) {
+        if history[i] == version {
+            out = push(out, history[i])
+            out = push(out, history[i + 1])
+            out = push(out, "rolled_back")
+        } else {
+            out = push(out, history[i])
+            out = push(out, history[i + 1])
+            out = push(out, history[i + 2])
+        }
+        i = i + 3
+    }
+    return out
+}
+
+// migration_count returns the number of recorded versions.
+public func migration_count(history) {
+    return len(history) / 3
+}
+
+// migration_state returns "missing", "applied" or "rolled_back".
+public func migration_state(history, version) {
+    let i = 0
+    while (i < len(history)) {
+        if history[i] == version {
+            return history[i + 2]
+        }
+        i = i + 3
+    }
+    return "missing"
+}
+
+// is_applied reports whether a version is in the applied state.
+public func is_applied(history, version) {
+    return migration_state(history, version) == "applied"
+}
+
+// last_version returns the highest applied version, or 0 when none.
+public func last_version(history) {
+    let best = 0
+    let i = 0
+    while (i < len(history)) {
+        if history[i + 2] == "applied" {
+            if history[i] > best {
+                best = history[i]
+            }
+        }
+        i = i + 3
+    }
+    return best
+}
+
+// pending_count counts supplied versions that are not applied.
+public func pending_count(history, versions) {
+    let n = 0
+    let i = 0
+    while (i < len(versions)) {
+        if is_applied(history, versions[i]) == false {
+            n = n + 1
+        }
+        i = i + 1
+    }
+    return n
+}
+
+// describe_migration builds a one-line migration diagnostic.
+public func describe_migration(history, version) {
+    if migration_state(history, version) == "missing" {
+        return "v" + str(version) + " -> <missing>"
+    }
+    return "v" + str(version) + " -> " + migration_state(history, version)
+}

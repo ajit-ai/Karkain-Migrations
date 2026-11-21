@@ -1,0 +1,7 @@
+name = "karkain-migrations"
+version = "0.1.0-dev"
+description = "Schema migration history and state tracking for Karkain"
+license = "MIT"
+targets = ["native"]
+
+[dependencies]

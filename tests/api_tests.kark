@@ -1,0 +1,62 @@
+// Native tests for Karkain-Migrations.
+
+func sample_history() {
+    let h = record_migration(new_history(), 1, "create_users")
+    return record_migration(h, 2, "add_email")
+}
+
+func test_new_history() {
+    assert_eq(migration_count(new_history()), 0)
+    assert_eq(migration_state(new_history(), 1), "missing")
+}
+
+func test_record_migration() {
+    let h = sample_history()
+    assert_eq(migration_count(h), 2)
+    assert_eq(migration_state(h, 1), "applied")
+}
+
+func test_record_replaces() {
+    let h = record_migration(sample_history(), 1, "renamed")
+    assert_eq(migration_count(h), 2)
+    assert_eq(migration_state(h, 1), "applied")
+}
+
+func test_is_applied() {
+    let h = sample_history()
+    assert(is_applied(h, 2))
+    assert(is_applied(h, 9) == false)
+}
+
+func test_mark_rolled_back() {
+    let h = mark_rolled_back(sample_history(), 1)
+    assert_eq(migration_state(h, 1), "rolled_back")
+    assert(is_applied(h, 1) == false)
+    assert_eq(migration_state(sample_history(), 1), "applied")
+}
+
+func test_mark_unknown_noop() {
+    let h = mark_rolled_back(new_history(), 7)
+    assert_eq(migration_count(h), 0)
+}
+
+func test_last_version() {
+    let h = sample_history()
+    assert_eq(last_version(h), 2)
+    assert_eq(last_version(new_history()), 0)
+    let r = mark_rolled_back(h, 2)
+    assert_eq(last_version(r), 1)
+}
+
+func test_pending_count() {
+    let h = sample_history()
+    let versions = [1, 2, 3, 4]
+    assert_eq(pending_count(h, versions), 2)
+    assert_eq(pending_count(new_history(), versions), 4)
+}
+
+func test_describe_migration() {
+    let h = sample_history()
+    assert_eq(describe_migration(h, 1), "v1 -> applied")
+    assert_eq(describe_migration(h, 9), "v9 -> <missing>")
+}

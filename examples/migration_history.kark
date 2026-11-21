@@ -1,0 +1,14 @@
+// Karkain-Migrations runnable example: track applied schema versions.
+import migrations
+
+func main() {
+    let h = new_history()
+    h = record_migration(h, 1, "create_users")
+    h = record_migration(h, 2, "add_email")
+    h = record_migration(h, 3, "add_index")
+
+    println(describe_migration(h, 1))
+    println(describe_migration(h, 3))
+    println("last=" + str(last_version(h)))
+    println("pending=" + str(pending_count(h, [1, 2, 3, 4, 5])))
+}
