@@ -60,3 +60,85 @@ func test_describe_migration() {
     assert_eq(describe_migration(h, 1), "v1 -> applied")
     assert_eq(describe_migration(h, 9), "v9 -> <missing>")
 }
+
+// --- Phase 2 regression ---
+
+func test_phase1_regression() {
+    let h = record_migration(new_history(), 1, "create")
+    assert_eq(migration_count(h), 1)
+    assert(is_applied(h, 1))
+    assert_eq(last_version(h), 1)
+    assert_eq(migration_state(h, 9), "missing")
+}
+
+// --- Phase 2 additions ---
+
+func test_plan_and_sql() {
+    let p = add_migration(add_migration(new_plan(), 1, "CREATE TABLE a", "DROP TABLE a"), 2, "ALTER TABLE a", "ALTER TABLE a BACK")
+    assert_eq(plan_count(p), 2)
+    assert(has_migration(p, 1))
+    assert_eq(migration_sql(p, 1, "up"), "CREATE TABLE a")
+    assert_eq(migration_sql(p, 1, "down"), "DROP TABLE a")
+    assert_eq(migration_sql(p, 9, "up"), "")
+}
+
+func test_duplicate_detection() {
+    let p = add_migration(add_migration(new_plan(), 1, "a", "b"), 1, "c", "d")
+    assert_eq(duplicate_count(p), 1)
+    assert_eq(duplicate_count(add_migration(new_plan(), 1, "a", "b")), 0)
+}
+
+func test_dependencies() {
+    let p = add_migration(add_migration(new_plan(), 1, "a", "b"), 2, "c", "d")
+    let deps = add_migration_dependency(new_dependencies(), 2, 1)
+    assert_eq(dependency_count(deps), 1)
+    assert_eq(missing_dependencies(p, deps), 0)
+    let bad = add_migration_dependency(new_dependencies(), 2, 9)
+    assert_eq(missing_dependencies(p, bad), 1)
+}
+
+func test_cycle_detection() {
+    let deps = add_migration_dependency(add_migration_dependency(add_migration_dependency(new_dependencies(), 1, 2), 2, 3), 3, 1)
+    assert(plan_has_cycle(deps, 8))
+    assert(plan_has_cycle(new_dependencies(), 8) == false)
+}
+
+func test_validate_plan() {
+    let p = add_migration(add_migration(new_plan(), 1, "a", "b"), 2, "c", "d")
+    let deps = add_migration_dependency(new_dependencies(), 2, 1)
+    assert(validate_plan(p, deps))
+    let missing = add_migration_dependency(new_dependencies(), 2, 9)
+    assert(validate_plan(p, missing) == false)
+    let dup = add_migration(p, 1, "x", "y")
+    assert(validate_plan(dup, deps) == false)
+}
+
+func test_schema_operations() {
+    let ops = add_schema_op(add_schema_op(new_schema_ops(), "add_column", "users", "age int"), "create_index", "users", "idx_age")
+    assert_eq(schema_op_count(ops), 2)
+    assert_eq(ops[2], "age int")
+}
+
+func test_schema_snapshots() {
+    let a = snapshot_add(snapshot_add(new_snapshot(), "users", "id,name"), "orders", "id")
+    let b = snapshot_add(snapshot_add(new_snapshot(), "users", "id,name"), "orders", "id,total")
+    assert_eq(compare_snapshots(a, a), 0)
+    assert_eq(compare_snapshots(a, b), 1)
+}
+
+func test_provider_and_state() {
+    let provider = new_checksum_provider("test-checksums")
+    assert_eq(provider_checksum(provider, 1), "test-checksums:1")
+    let state = set_exec_state(set_exec_state(new_exec_state(), 1, "applied"), 2, "failed")
+    assert_eq(exec_state(state, 1), "applied")
+    assert_eq(exec_state(state, 2), "failed")
+    assert_eq(exec_state(state, 9), "missing")
+}
+
+func test_failure_and_policy() {
+    assert_eq(migration_failure(1), "sql")
+    assert_eq(migration_failure(2), "checksum")
+    assert_eq(migration_failure(99), "unknown")
+    assert(policy_allows(new_policy("development"), "down"))
+    assert(policy_allows(new_policy("production"), "down") == false)
+}

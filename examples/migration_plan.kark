@@ -1,0 +1,15 @@
+// Karkain-Migrations Phase 2 example: planning and validation only.
+import migrations
+
+func main() {
+    let plan = add_migration(add_migration(new_plan(), 1, "CREATE TABLE users", "DROP TABLE users"), 2, "ALTER TABLE users", "ALTER TABLE users BACK")
+    let deps = add_migration_dependency(new_dependencies(), 2, 1)
+
+    println("count=" + str(plan_count(plan)))
+    println("valid=" + str(validate_plan(plan, deps)))
+    println(migration_sql(plan, 1, "up"))
+    println("policy_down=" + str(policy_allows(new_policy("production"), "down")))
+
+    let state = set_exec_state(new_exec_state(), 1, "applied")
+    println("state=" + exec_state(state, 1))
+}

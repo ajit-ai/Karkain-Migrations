@@ -118,3 +118,246 @@ public func describe_migration(history, version) {
     }
     return "v" + str(version) + " -> " + migration_state(history, version)
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 additions. Phase 1 history API is unchanged. Planning and
+// validation operate on deterministic in-memory models. Persistent history,
+// real database rollback, transactions and locking are BLOCKED by missing
+// database driver and filesystem builtins.
+
+// new_plan creates an empty migration plan.
+public func new_plan() {
+    return []
+}
+
+// add_migration declares a migration with id and up/down SQL text.
+public func add_migration(plan, id, up, down) {
+    let out = plan
+    out = push(out, id)
+    out = push(out, up)
+    out = push(out, down)
+    out = push(out, "pending")
+    return out
+}
+
+// plan_count returns the number of declared migrations.
+public func plan_count(plan) {
+    return len(plan) / 4
+}
+
+// has_migration reports whether an id is declared.
+public func has_migration(plan, id) {
+    let i = 0
+    while (i < len(plan)) {
+        if plan[i] == id { return true }
+        i = i + 4
+    }
+    return false
+}
+
+// migration_sql returns up or down SQL text for an id.
+public func migration_sql(plan, id, direction) {
+    let i = 0
+    while (i < len(plan)) {
+        if plan[i] == id {
+            if direction == "up" { return plan[i + 1] }
+            return plan[i + 2]
+        }
+        i = i + 4
+    }
+    return ""
+}
+
+// duplicate_count counts repeated migration ids.
+public func duplicate_count(plan) {
+    let n = 0
+    let i = 0
+    while (i < len(plan)) {
+        let j = i + 4
+        while (j < len(plan)) {
+            if plan[i] == plan[j] { n = n + 1 }
+            j = j + 4
+        }
+        i = i + 4
+    }
+    return n
+}
+
+// new_dependencies creates an empty migration dependency store.
+public func new_dependencies() {
+    return []
+}
+
+// add_migration_dependency records that an id depends on another id.
+public func add_migration_dependency(deps, id, required) {
+    let out = deps
+    out = push(out, id)
+    out = push(out, required)
+    return out
+}
+
+// dependency_count returns the number of dependency edges.
+public func dependency_count(deps) {
+    return len(deps) / 2
+}
+
+// missing_dependencies counts edges whose target is undeclared.
+public func missing_dependencies(plan, deps) {
+    let n = 0
+    let i = 0
+    while (i < len(deps)) {
+        if has_migration(plan, deps[i + 1]) == false { n = n + 1 }
+        i = i + 2
+    }
+    return n
+}
+
+// dependency_reachable walks a bounded dependency chain.
+public func dependency_reachable(deps, from, target, depth) {
+    if from == target { return true }
+    if depth == 0 { return false }
+    let i = 0
+    while (i < len(deps)) {
+        if deps[i] == from {
+            if dependency_reachable(deps, deps[i + 1], target, depth - 1) { return true }
+        }
+        i = i + 2
+    }
+    return false
+}
+
+// plan_has_cycle reports a dependency cycle.
+public func plan_has_cycle(deps, depth) {
+    let i = 0
+    while (i < len(deps)) {
+        if dependency_reachable(deps, deps[i + 1], deps[i], depth) { return true }
+        i = i + 2
+    }
+    return false
+}
+
+// validate_plan reports whether a plan has duplicates or missing/cyclic
+// dependencies.
+public func validate_plan(plan, deps) {
+    if duplicate_count(plan) > 0 { return false }
+    if missing_dependencies(plan, deps) > 0 { return false }
+    if plan_has_cycle(deps, 8) { return false }
+    return true
+}
+
+// new_schema_ops creates an empty schema operation list.
+public func new_schema_ops() {
+    return []
+}
+
+// add_schema_op records a schema operation.
+public func add_schema_op(ops, kind, target, detail) {
+    let out = ops
+    out = push(out, kind)
+    out = push(out, target)
+    out = push(out, detail)
+    return out
+}
+
+// schema_op_count returns the number of operations.
+public func schema_op_count(ops) {
+    return len(ops) / 3
+}
+
+// new_snapshot creates an empty schema snapshot.
+public func new_snapshot() {
+    return []
+}
+
+// snapshot_add records a schema item.
+public func snapshot_add(snapshot, name, value) {
+    let out = snapshot
+    out = push(out, name)
+    out = push(out, value)
+    return out
+}
+
+// compare_snapshots counts differing items in two snapshots.
+public func compare_snapshots(a, b) {
+    let n = 0
+    let i = 0
+    while (i < len(a)) {
+        let other = ""
+        let j = 0
+        while (j < len(b)) {
+            if b[j] == a[i] { other = b[j + 1] }
+            j = j + 2
+        }
+        if a[i + 1] != other { n = n + 1 }
+        i = i + 2
+    }
+    return n
+}
+
+// new_checksum_provider declares a checksum provider name.
+public func new_checksum_provider(name) {
+    let p = []
+    p = push(p, name)
+    return p
+}
+
+// provider_checksum returns a deterministic provider identity string.
+public func provider_checksum(provider, id) {
+    return provider[0] + ":" + str(id)
+}
+
+// new_exec_state creates an execution state store.
+public func new_exec_state() {
+    return []
+}
+
+// set_exec_state records execution status for an id.
+public func set_exec_state(state, id, status) {
+    let out = []
+    out = push(out, id)
+    out = push(out, status)
+    let i = 0
+    while (i < len(state)) {
+        if state[i] == id {
+            i = i + 2
+        } else {
+            out = push(out, state[i])
+            out = push(out, state[i + 1])
+            i = i + 2
+        }
+    }
+    return out
+}
+
+// exec_state returns recorded status or "missing".
+public func exec_state(state, id) {
+    let i = 0
+    while (i < len(state)) {
+        if state[i] == id { return state[i + 1] }
+        i = i + 2
+    }
+    return "missing"
+}
+
+// migration_failure classifies a failure code.
+public func migration_failure(code) {
+    if code == 1 { return "sql" }
+    if code == 2 { return "checksum" }
+    if code == 3 { return "dependency" }
+    return "unknown"
+}
+
+// new_policy creates an environment policy.
+public func new_policy(environment) {
+    let p = []
+    p = push(p, environment)
+    return p
+}
+
+// policy_allows reports whether an operation is permitted by a policy.
+public func policy_allows(policy, operation) {
+    if policy[0] == "production" {
+        if operation == "down" { return false }
+    }
+    return true
+}
